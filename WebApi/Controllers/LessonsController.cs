@@ -35,17 +35,17 @@ public class LessonsController(ILessonService lessonService) : BaseController
 
     [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Instructor}")]
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<Result<LessonDto>>> Update(Guid id, UpdateLessonDto dto)
+    public async Task<ActionResult<Result<LessonDto>>> Update(Guid courseId, Guid id, UpdateLessonDto dto)
     {
-        var result = await lessonService.UpdateAsync(id, UserId, IsAdmin, dto);
+        var result = await lessonService.UpdateAsync(courseId, id, UserId, IsAdmin, dto);
         return Ok(result);
     }
 
     [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Instructor}")]
     [HttpDelete("{id:guid}")]
-    public async Task<ActionResult<Result>> Delete(Guid id)
+    public async Task<ActionResult<Result>> Delete(Guid courseId, Guid id)
     {
-        var result = await lessonService.DeleteAsync(id, UserId, IsAdmin);
+        var result = await lessonService.DeleteAsync(courseId, id, UserId, IsAdmin);
         return Ok(result);
     }
 }

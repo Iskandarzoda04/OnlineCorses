@@ -26,16 +26,7 @@ public class UserService : IUserService
         var users = _userManager.Users.OrderBy(u => u.FullName).ToList();
         var result = new List<UserSummaryDto>();
         foreach (var user in users)
-        {
-            var roles = await _userManager.GetRolesAsync(user);
-            result.Add(new UserSummaryDto
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email ?? string.Empty,
-                Roles = roles.ToList()
-            });
-        }
+            result.Add(await MapAsync(user));
 
         _logger.LogInformation("Returned {Count} users", result.Count);
         return Result<IReadOnlyList<UserSummaryDto>>.Success(result);
@@ -47,16 +38,7 @@ public class UserService : IUserService
         if (user is null)
             return Result<UserSummaryDto>.Failure("User not found.", ErrorType.NotFound);
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var dto = new UserSummaryDto
-        {
-            Id = user.Id,
-            FullName = user.FullName,
-            Email = user.Email ?? string.Empty,
-            Roles = roles.ToList()
-        };
-
-        return Result<UserSummaryDto>.Success(dto);
+        return Result<UserSummaryDto>.Success(await MapAsync(user));
     }
 
     public async Task<Result<UserSummaryDto>> ChangeRoleAsync(string id, ChangeUserRoleDto dto)
@@ -80,16 +62,7 @@ public class UserService : IUserService
             return Result<UserSummaryDto>.Failure(string.Join("; ", addResult.Errors.Select(e => e.Description)), ErrorType.Validation);
 
         _logger.LogInformation("User {UserId} role changed to {Role}", id, dto.Role);
-        var roles = await _userManager.GetRolesAsync(user);
-        var userDto = new UserSummaryDto
-        {
-            Id = user.Id,
-            FullName = user.FullName,
-            Email = user.Email ?? string.Empty,
-            Roles = roles.ToList()
-        };
-
-        return Result<UserSummaryDto>.Success(userDto);
+        return Result<UserSummaryDto>.Success(await MapAsync(user));
     }
 
     public async Task<Result> DeleteAsync(string id)
@@ -101,5 +74,17 @@ public class UserService : IUserService
         return result.Succeeded
             ? Result.Success("User deleted.")
             : Result.Failure(string.Join("; ", result.Errors.Select(e => e.Description)), ErrorType.Validation);
+    }
+
+    private async Task<UserSummaryDto> MapAsync(ApplicationUser user)
+    {
+        var roles = await _userManager.GetRolesAsync(user);
+        return new UserSummaryDto
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email ?? string.Empty,
+            Roles = roles.ToList()
+        };
     }
 }

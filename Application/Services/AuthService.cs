@@ -6,6 +6,7 @@ using Domain.Constants;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using System.Text;
 
 namespace Application.Services;
 
@@ -48,7 +49,7 @@ public class AuthService : IAuthService
 
         var existingUser = await _userManager.FindByEmailAsync(dto.Email);
         if (existingUser is not null)
-            return Result<AuthResponseDto>.Failure("Email already exists.", ErrorType.Validation);
+            return Result<AuthResponseDto>.Failure("Email already exists.", ErrorType.Conflict);
 
         var user = new ApplicationUser
         {
@@ -63,7 +64,10 @@ public class AuthService : IAuthService
 
         var addToRoleResult = await _userManager.AddToRoleAsync(user, role);
         if (!addToRoleResult.Succeeded)
+        {
+            await _userManager.DeleteAsync(user);
             return Result<AuthResponseDto>.Failure("Failed to assign user role.", ErrorType.Validation);
+        }
 
         _logger.LogInformation("User {Email} registered as {Role}", dto.Email, role);
 
@@ -93,9 +97,17 @@ public class AuthService : IAuthService
         if (user is null)
             return Result<AuthResponseDto>.Failure("Invalid email or password.", ErrorType.Unauthorized);
 
+        if (await _userManager.IsLockedOutAsync(user))
+            return Result<AuthResponseDto>.Failure("User is locked out. Try again later.", ErrorType.Unauthorized);
+
         var isPasswordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
         if (!isPasswordValid)
+        {
+            await _userManager.AccessFailedAsync(user);
             return Result<AuthResponseDto>.Failure("Invalid email or password.", ErrorType.Unauthorized);
+        }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
 
         var token = await _tokenService.CreateTokenAsync(user);
         var roles = await _userManager.GetRolesAsync(user);
@@ -168,6 +180,10 @@ public class AuthService : IAuthService
         if (user is not null)
         {
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = Convert.ToBase64String(Encoding.UTF8.GetBytes(token)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var encodedEmail = Convert.ToBase64String(Encoding.UTF8.GetBytes(user.Email ?? dto.Email)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var frontendBaseUrl = Environment.GetEnvironmentVariable("FRONTEND_BASE_URL") ?? "http://localhost:3000";
+            var resetLink = $"{frontendBaseUrl.TrimEnd('/')}/reset-password?email={encodedEmail}&token={encodedToken}";
 
             await _emailService.SendAsync(new EmailMessageDto
             {
@@ -176,8 +192,8 @@ public class AuthService : IAuthService
                 Body = $"""
                     <h2>Reset password</h2>
                     <p>You requested a password reset.</p>
-                    <p>Use this token to reset your password:</p>
-                    <pre>{token}</pre>
+                    <p>Click the link below to reset your password:</p>
+                    <p><a href="{resetLink}">Reset password</a></p>
                     <p>If you did not request this, ignore this email.</p>
                     """,
                 IsHtml = true
@@ -198,11 +214,31 @@ public class AuthService : IAuthService
         if (dto.NewPassword != dto.ConfirmPassword)
             return Result.Failure("Passwords do not match.", ErrorType.Validation);
 
-        var user = await _userManager.FindByEmailAsync(dto.Email);
+        string email;
+        string token;
+
+        try
+        {
+            var emailBase64 = dto.Email.Replace('-', '+').Replace('_', '/');
+            var tokenBase64 = dto.Token.Replace('-', '+').Replace('_', '/');
+
+            emailBase64 = emailBase64.PadRight(emailBase64.Length + (4 - emailBase64.Length % 4) % 4, '=');
+            tokenBase64 = tokenBase64.PadRight(tokenBase64.Length + (4 - tokenBase64.Length % 4) % 4, '=');
+
+            email = Encoding.UTF8.GetString(Convert.FromBase64String(emailBase64));
+            token = Encoding.UTF8.GetString(Convert.FromBase64String(tokenBase64));
+        }
+        catch
+        {
+            email = dto.Email;
+            token = dto.Token;
+        }
+
+        var user = await _userManager.FindByEmailAsync(email);
         if (user is null)
             return Result.Failure("Invalid reset request.", ErrorType.Validation);
 
-        var result = await _userManager.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
+        var result = await _userManager.ResetPasswordAsync(user, token, dto.NewPassword);
         if (!result.Succeeded)
             return Result.Failure("Password reset failed.", ErrorType.Validation);
 

@@ -1,5 +1,5 @@
 using System.Text;
-using Application.Interfaces;
+using Application.Interfaces.Repositories;
 using Application.Interfaces.Services;
 using Application.Services;
 using Domain.Entities;
@@ -7,6 +7,8 @@ using Infrastructure.Data;
 using Infrastructure.Email;
 using Infrastructure.FileStorage;
 using Infrastructure.Identity;
+using Infrastructure.Repositories;
+using Infrastructure.Seed;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -32,7 +34,6 @@ builder.Host.UseSerilog((context, services, configuration) =>
 
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
-builder.Services.AddMemoryCache();
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "DataProtectionKeys")));
 
@@ -40,9 +41,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
-
-builder.Services.AddScoped<IAppDbContext>(provider =>
-    provider.GetRequiredService<AppDbContext>());
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -52,6 +50,9 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
     options.Password.RequireUppercase = false;
     options.Password.RequireNonAlphanumeric = false;
     options.User.RequireUniqueEmail = true;
+    options.Lockout.AllowedForNewUsers = true;
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
@@ -72,6 +73,9 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        RequireExpirationTime = true,
+        RequireSignedTokens = true,
+        ClockSkew = TimeSpan.FromMinutes(1),
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(jwtKey)
@@ -83,20 +87,29 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("EmailSettings"));
 
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
-    ConnectionMultiplexer.Connect(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
+{
+    var options = ConfigurationOptions.Parse(builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
+    options.AbortOnConnectFail = false;
+    return ConnectionMultiplexer.Connect(options);
+});
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
+builder.Services.AddScoped<ICourseRepository, CourseRepository>();
+builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<ILessonService, LessonService>();
+builder.Services.AddScoped<ILessonRepository, LessonRepository>();
 builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
+builder.Services.AddScoped<IEnrollmentRepository, EnrollmentRepository>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IFileService, FileService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<Application.Interfaces.IRedisCacheService, InfrastructureRedisCacheService>();
 builder.Services.AddScoped<ICacheService, InfrastructureRedisCacheService>();
+builder.Services.AddScoped<RoleSeeder>();
 
 builder.Services.AddCors(options =>
 {
@@ -146,6 +159,19 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var seeder = scope.ServiceProvider.GetRequiredService<RoleSeeder>();
+        await seeder.SeedAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Database seeding failed.");
+    }
+}
 
 app.UseSerilogRequestLogging();
 

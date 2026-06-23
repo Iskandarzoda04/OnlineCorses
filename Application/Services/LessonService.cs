@@ -1,63 +1,77 @@
 using Application.Common;
 using Application.DTOs.Lessons;
+using Application.Interfaces.Repositories;
 using Application.Interfaces.Services;
+using Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Services;
 
 public class LessonService : ILessonService
 {
-    private static readonly List<LessonDto> Lessons = new();
+    private readonly ILessonRepository _lessonRepository;
     private readonly ILogger<LessonService> _logger;
 
-    public LessonService(ILogger<LessonService> logger)
+    public LessonService(
+        ILessonRepository lessonRepository,
+        ILogger<LessonService> logger)
     {
+        _lessonRepository = lessonRepository;
         _logger = logger;
     }
 
-    public Task<Result<IReadOnlyList<LessonDto>>> GetByCourseAsync(Guid CourseId)
+    public async Task<Result<IReadOnlyList<LessonDto>>> GetByCourseAsync(Guid CourseId)
     {
         if (CourseId == Guid.Empty)
-            return Task.FromResult(Result<IReadOnlyList<LessonDto>>.Failure("CourseId is required.", ErrorType.Validation));
+            return Result<IReadOnlyList<LessonDto>>.Failure("CourseId is required.", ErrorType.Validation);
 
-        IReadOnlyList<LessonDto> lessons = Lessons
-            .Where(l => l.CourseId == CourseId)
-            .OrderBy(l => l.Order)
-            .ToList();
+        var course = await _lessonRepository.GetCourseAsync(CourseId);
+        if (course is null)
+            return Result<IReadOnlyList<LessonDto>>.Failure("Course not found.", ErrorType.NotFound);
 
-        return Task.FromResult(Result<IReadOnlyList<LessonDto>>.Success(lessons));
+        var lessons = await _lessonRepository.GetByCourseAsync(CourseId);
+        return Result<IReadOnlyList<LessonDto>>.Success(lessons.Select(MapToDto).ToList());
     }
 
-    public Task<Result<LessonDto>> GetByIdAsync(Guid courseId, Guid id)
+    public async Task<Result<LessonDto>> GetByIdAsync(Guid courseId, Guid id)
     {
-        var lesson = Lessons.FirstOrDefault(l => l.CourseId == courseId && l.Id == id);
+        var lesson = await _lessonRepository.GetByCourseAndIdAsync(courseId, id);
 
         if (lesson is null)
-            return Task.FromResult(Result<LessonDto>.Failure("Lesson not found.", ErrorType.NotFound));
+            return Result<LessonDto>.Failure("Lesson not found.", ErrorType.NotFound);
 
-        return Task.FromResult(Result<LessonDto>.Success(lesson));
+        return Result<LessonDto>.Success(MapToDto(lesson));
     }
 
-    public Task<Result<LessonDto>> CreateAsync(string userId, bool isAdmin, CreateLessonDto dto)
+    public async Task<Result<LessonDto>> CreateAsync(string userId, bool isAdmin, CreateLessonDto dto)
     {
         if (string.IsNullOrWhiteSpace(userId))
-            return Task.FromResult(Result<LessonDto>.Failure("User is not authorized.", ErrorType.Unauthorized));
+            return Result<LessonDto>.Failure("User is not authorized.", ErrorType.Unauthorized);
 
         if (dto.CourseId == Guid.Empty)
-            return Task.FromResult(Result<LessonDto>.Failure("CourseId is required.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("CourseId is required.", ErrorType.Validation);
 
         if (string.IsNullOrWhiteSpace(dto.Title))
-            return Task.FromResult(Result<LessonDto>.Failure("Lesson title is required.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("Lesson title is required.", ErrorType.Validation);
+
+        if (dto.Title.Length > 200)
+            return Result<LessonDto>.Failure("Lesson title max length is 200 characters.", ErrorType.Validation);
 
         if (dto.Order < 0)
-            return Task.FromResult(Result<LessonDto>.Failure("Lesson order cannot be negative.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("Lesson order cannot be negative.", ErrorType.Validation);
 
         if (dto.DurationMinutes < 0)
-            return Task.FromResult(Result<LessonDto>.Failure("DurationMinutes cannot be negative.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("DurationMinutes cannot be negative.", ErrorType.Validation);
 
-        var lesson = new LessonDto
+        var course = await _lessonRepository.GetCourseAsync(dto.CourseId);
+        if (course is null)
+            return Result<LessonDto>.Failure("Course not found.", ErrorType.NotFound);
+
+        if (!isAdmin && course.InstructorId != userId)
+            return Result<LessonDto>.Failure("You can add lessons only to your own courses.", ErrorType.Forbidden);
+
+        var lesson = new Lesson
         {
-            Id = Guid.NewGuid(),
             CourseId = dto.CourseId,
             Title = dto.Title.Trim(),
             Content = dto.Content,
@@ -66,30 +80,37 @@ public class LessonService : ILessonService
             DurationMinutes = dto.DurationMinutes
         };
 
-        Lessons.Add(lesson);
+        await _lessonRepository.CreateAsync(lesson);
+
         _logger.LogInformation("Lesson {LessonId} created by {UserId}", lesson.Id, userId);
 
-        return Task.FromResult(Result<LessonDto>.Success(lesson));
+        return Result<LessonDto>.Success(MapToDto(lesson));
     }
 
-    public Task<Result<LessonDto>> UpdateAsync(Guid Id, string userId, bool isAdmin, UpdateLessonDto dto)
+    public async Task<Result<LessonDto>> UpdateAsync(Guid courseId, Guid Id, string userId, bool isAdmin, UpdateLessonDto dto)
     {
         if (string.IsNullOrWhiteSpace(userId))
-            return Task.FromResult(Result<LessonDto>.Failure("User is not authorized.", ErrorType.Unauthorized));
+            return Result<LessonDto>.Failure("User is not authorized.", ErrorType.Unauthorized);
 
-        var lesson = Lessons.FirstOrDefault(l => l.Id == Id);
+        var lesson = await _lessonRepository.GetByCourseAndIdAsync(courseId, Id);
 
         if (lesson is null)
-            return Task.FromResult(Result<LessonDto>.Failure("Lesson not found.", ErrorType.NotFound));
+            return Result<LessonDto>.Failure("Lesson not found.", ErrorType.NotFound);
+
+        if (!isAdmin && lesson.Course.InstructorId != userId)
+            return Result<LessonDto>.Failure("You can update lessons only in your own courses.", ErrorType.Forbidden);
 
         if (string.IsNullOrWhiteSpace(dto.Title))
-            return Task.FromResult(Result<LessonDto>.Failure("Lesson title is required.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("Lesson title is required.", ErrorType.Validation);
+
+        if (dto.Title.Length > 200)
+            return Result<LessonDto>.Failure("Lesson title max length is 200 characters.", ErrorType.Validation);
 
         if (dto.Order < 0)
-            return Task.FromResult(Result<LessonDto>.Failure("Lesson order cannot be negative.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("Lesson order cannot be negative.", ErrorType.Validation);
 
         if (dto.DurationMinutes < 0)
-            return Task.FromResult(Result<LessonDto>.Failure("DurationMinutes cannot be negative.", ErrorType.Validation));
+            return Result<LessonDto>.Failure("DurationMinutes cannot be negative.", ErrorType.Validation);
 
         lesson.Title = dto.Title.Trim();
         lesson.Content = dto.Content;
@@ -97,21 +118,40 @@ public class LessonService : ILessonService
         lesson.Order = dto.Order;
         lesson.DurationMinutes = dto.DurationMinutes;
 
-        return Task.FromResult(Result<LessonDto>.Success(lesson));
+        await _lessonRepository.UpdateAsync(lesson);
+
+        return Result<LessonDto>.Success(MapToDto(lesson));
     }
 
-    public Task<Result> DeleteAsync(Guid Id, string userId, bool isAdmin)
+    public async Task<Result> DeleteAsync(Guid courseId, Guid Id, string userId, bool isAdmin)
     {
         if (string.IsNullOrWhiteSpace(userId))
-            return Task.FromResult(Result.Failure("User is not authorized.", ErrorType.Unauthorized));
+            return Result.Failure("User is not authorized.", ErrorType.Unauthorized);
 
-        var lesson = Lessons.FirstOrDefault(l => l.Id == Id);
+        var lesson = await _lessonRepository.GetByCourseAndIdAsync(courseId, Id);
 
         if (lesson is null)
-            return Task.FromResult(Result.Failure("Lesson not found.", ErrorType.NotFound));
+            return Result.Failure("Lesson not found.", ErrorType.NotFound);
 
-        Lessons.Remove(lesson);
+        if (!isAdmin && lesson.Course.InstructorId != userId)
+            return Result.Failure("You can delete lessons only in your own courses.", ErrorType.Forbidden);
 
-        return Task.FromResult(Result.Success("Lesson deleted successfully."));
+        await _lessonRepository.DeleteAsync(lesson);
+
+        return Result.Success("Lesson deleted successfully.");
+    }
+
+    private static LessonDto MapToDto(Lesson lesson)
+    {
+        return new LessonDto
+        {
+            Id = lesson.Id,
+            CourseId = lesson.CourseId,
+            Title = lesson.Title,
+            Content = lesson.Content,
+            VideoUrl = lesson.VideoUrl,
+            Order = lesson.Order,
+            DurationMinutes = lesson.DurationMinutes
+        };
     }
 }

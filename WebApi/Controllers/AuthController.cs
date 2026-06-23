@@ -13,14 +13,30 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<ActionResult<Result<AuthResponseDto>>> Register(RegisterDto dto)
     {
         var result = await authService.RegisterAsync(dto);
-        return Ok(result);
+        if (result.IsSuccess)
+            return Ok(result);
+
+        return result.ErrorType switch
+        {
+            ErrorType.Validation => BadRequest(result),
+            ErrorType.Conflict => Conflict(result),
+            _ => StatusCode(500, result)
+        };
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<Result<AuthResponseDto>>> Login(LoginDto dto)
     {
         var result = await authService.LoginAsync(dto);
-        return Ok(result);
+        if (result.IsSuccess)
+            return Ok(result);
+
+        return result.ErrorType switch
+        {
+            ErrorType.Validation => BadRequest(result),
+            ErrorType.Unauthorized => Unauthorized(result),
+            _ => StatusCode(500, result)
+        };
     }
 
     [Authorize]
@@ -28,7 +44,16 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<ActionResult<Result>> ChangePassword(ChangePasswordDto dto)
     {
         var result = await authService.ChangePasswordAsync(UserId, dto);
-        return Ok(result);
+        if (result.IsSuccess)
+            return Ok(result);
+
+        return result.ErrorType switch
+        {
+            ErrorType.Validation => BadRequest(result),
+            ErrorType.Unauthorized => Unauthorized(result),
+            ErrorType.NotFound => NotFound(result),
+            _ => StatusCode(500, result)
+        };
     }
 
     [Authorize]
@@ -36,20 +61,36 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<ActionResult<Result<UserDto>>> Me()
     {
         var result = await authService.GetMeAsync(UserId);
-        return Ok(result);
+        if (result.IsSuccess)
+            return Ok(result);
+
+        return result.ErrorType switch
+        {
+            ErrorType.Unauthorized => Unauthorized(result),
+            ErrorType.NotFound => NotFound(result),
+            _ => StatusCode(500, result)
+        };
     }
 
     [HttpPost("forgot-password")]
     public async Task<ActionResult<Result>> ForgotPassword(ForgotPasswordDto dto)
     {
         var result = await authService.ForgotPasswordAsync(dto);
-        return Ok(result);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
     [HttpPost("reset-password")]
     public async Task<ActionResult<Result>> ResetPassword(ResetPasswordDto dto)
     {
         var result = await authService.ResetPasswordAsync(dto);
-        return Ok(result);
+        if (result.IsSuccess)
+            return Ok(result);
+
+        return result.ErrorType switch
+        {
+            ErrorType.Validation => BadRequest(result),
+            ErrorType.NotFound => NotFound(result),
+            _ => StatusCode(500, result)
+        };
     }
 }

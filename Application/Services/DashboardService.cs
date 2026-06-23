@@ -1,25 +1,28 @@
 using Application.Common;
 using Application.DTOs.Dashboard;
+using Application.Interfaces.Repositories;
 using Application.Interfaces.Services;
 using Domain.Constants;
 using Domain.Entities;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Services;
 
 public class DashboardService : IDashboardService
 {
+    private readonly IDashboardRepository _dashboardRepository;
     private readonly ICacheService _cache;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ILogger<DashboardService> _logger;
 
     public DashboardService(
+        IDashboardRepository dashboardRepository,
         ICacheService cache,
         UserManager<ApplicationUser> userManager,
         ILogger<DashboardService> logger)
     {
+        _dashboardRepository = dashboardRepository;
         _cache = cache;
         _userManager = userManager;
         _logger = logger;
@@ -38,16 +41,16 @@ public class DashboardService : IDashboardService
 
         var summary = new DashboardSummaryDto
         {
-            TotalCourses = 0,
-            PublishedCourses = 0,
+            TotalCourses = await _dashboardRepository.GetTotalCoursesAsync(),
+            PublishedCourses = await _dashboardRepository.GetPublishedCoursesAsync(),
             TotalStudents = students.Count,
             TotalInstructors = instructors.Count,
-            TotalEnrollments = 0,
-            ActiveEnrollments = 0,
-            CompletedEnrollments = 0,
-            TotalRevenue = 0,
-            AveragePlatformRating = 0,
-            TotalReviews = 0
+            TotalEnrollments = await _dashboardRepository.GetTotalEnrollmentsAsync(),
+            ActiveEnrollments = await _dashboardRepository.GetActiveEnrollmentsAsync(),
+            CompletedEnrollments = await _dashboardRepository.GetCompletedEnrollmentsAsync(),
+            TotalRevenue = await _dashboardRepository.GetTotalRevenueAsync(),
+            AveragePlatformRating = await _dashboardRepository.GetAverageRatingAsync(),
+            TotalReviews = await _dashboardRepository.GetTotalReviewsAsync()
         };
 
         await _cache.SetAsync(cacheKey, summary, TimeSpan.FromMinutes(5));
@@ -64,7 +67,7 @@ public class DashboardService : IDashboardService
         if (cached is not null)
             return Result<IReadOnlyList<TopCourseDto>>.Success(cached);
 
-        IReadOnlyList<TopCourseDto> topCourses = new List<TopCourseDto>();
+        var topCourses = await _dashboardRepository.GetTopCoursesAsync();
 
         await _cache.SetAsync(cacheKey, topCourses, TimeSpan.FromMinutes(30));
         _logger.LogInformation("Dashboard top courses created and cached.");
@@ -72,22 +75,22 @@ public class DashboardService : IDashboardService
         return Result<IReadOnlyList<TopCourseDto>>.Success(topCourses);
     }
 
-    public Task<Result<IReadOnlyList<MonthlyEnrollmentDto>>> GetEnrollmentsByMonthAsync()
+    public async Task<Result<IReadOnlyList<MonthlyEnrollmentDto>>> GetEnrollmentsByMonthAsync()
     {
-        IReadOnlyList<MonthlyEnrollmentDto> enrollments = new List<MonthlyEnrollmentDto>();
-        return Task.FromResult(Result<IReadOnlyList<MonthlyEnrollmentDto>>.Success(enrollments));
+        var result = await _dashboardRepository.GetEnrollmentsByMonthAsync();
+        return Result<IReadOnlyList<MonthlyEnrollmentDto>>.Success(result);
     }
 
-    public Task<Result<IReadOnlyList<CategoryRevenueDto>>> GetRevenueByCategoryAsync()
+    public async Task<Result<IReadOnlyList<CategoryRevenueDto>>> GetRevenueByCategoryAsync()
     {
-        IReadOnlyList<CategoryRevenueDto> revenue = new List<CategoryRevenueDto>();
-        return Task.FromResult(Result<IReadOnlyList<CategoryRevenueDto>>.Success(revenue));
+        var result = await _dashboardRepository.GetRevenueByCategoryAsync();
+        return Result<IReadOnlyList<CategoryRevenueDto>>.Success(result);
     }
 
-    public Task<Result<IReadOnlyList<CompletionRateDto>>> GetCompletionRateAsync()
+    public async Task<Result<IReadOnlyList<CompletionRateDto>>> GetCompletionRateAsync()
     {
-        IReadOnlyList<CompletionRateDto> completionRates = new List<CompletionRateDto>();
-        return Task.FromResult(Result<IReadOnlyList<CompletionRateDto>>.Success(completionRates));
+        var result = await _dashboardRepository.GetCompletionRateAsync();
+        return Result<IReadOnlyList<CompletionRateDto>>.Success(result);
     }
 
     public async Task<Result<InstructorStatsDto>> GetInstructorStatsAsync(string instructorId, string currentUserId, bool isAdmin)
@@ -99,61 +102,23 @@ public class DashboardService : IDashboardService
             return Result<InstructorStatsDto>.Failure("You can view only your own statistics.", ErrorType.Forbidden);
 
         var instructor = await _userManager.FindByIdAsync(instructorId);
-
         if (instructor is null)
             return Result<InstructorStatsDto>.Failure("Instructor not found.", ErrorType.NotFound);
 
-        var isInstructor = await _userManager.IsInRoleAsync(instructor, UserRoles.Instructor);
-
-        if (!isInstructor)
-            return Result<InstructorStatsDto>.Failure("User is not instructor.", ErrorType.Validation);
-
-        var stats = new InstructorStatsDto
-        {
-            InstructorName = instructor.FullName,
-            CourseCount = 0,
-            PublishedCourseCount = 0,
-            TotalStudents = 0,
-            TotalReviews = 0,
-            AverageRating = 0,
-            TotalRevenue = 0,
-            TopCourses = new List<TopCourseDto>(),
-            EnrollmentTrend = new List<MonthlyEnrollmentDto>()
-        };
-
-        return Result<InstructorStatsDto>.Success(stats);
+        var result = await _dashboardRepository.GetInstructorStatsAsync(instructorId, instructor.FullName);
+        return Result<InstructorStatsDto>.Success(result);
     }
 
     public async Task<Result<StudentsProgressSummaryDto>> GetStudentsProgressAsync()
     {
-        var totalStudents = await _userManager.GetUsersInRoleAsync(UserRoles.Student);
-
-        var summary = new StudentsProgressSummaryDto
-        {
-            TotalStudents = totalStudents.Count,
-            StudentsWithActiveEnrollment = 0,
-            StudentsCompletedAtLeastOne = 0,
-            StudentsNeverStarted = totalStudents.Count,
-            AverageCoursesPerStudent = 0,
-            TopActiveStudents = new List<StudentProgressDto>()
-        };
-
-        return Result<StudentsProgressSummaryDto>.Success(summary);
+        var students = await _userManager.GetUsersInRoleAsync(UserRoles.Student);
+        var result = await _dashboardRepository.GetStudentsProgressAsync(students.Count);
+        return Result<StudentsProgressSummaryDto>.Success(result);
     }
 
-    public Task<Result<RatingsDistributionDto>> GetRatingsDistributionAsync()
+    public async Task<Result<RatingsDistributionDto>> GetRatingsDistributionAsync()
     {
-        var ratings = new RatingsDistributionDto
-        {
-            OneStar = 0,
-            TwoStars = 0,
-            ThreeStars = 0,
-            FourStars = 0,
-            FiveStars = 0,
-            AverageRating = 0,
-            TotalReviews = 0
-        };
-
-        return Task.FromResult(Result<RatingsDistributionDto>.Success(ratings));
+        var result = await _dashboardRepository.GetRatingsDistributionAsync();
+        return Result<RatingsDistributionDto>.Success(result);
     }
 }

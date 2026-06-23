@@ -58,9 +58,9 @@ public class CoursesController(ICourseService courseService) : BaseController
 
     [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Instructor}")]
     [HttpPost("{id:guid}/thumbnail")]
-    public async Task<ActionResult<Result<CourseDto>>> UploadThumbnail(Guid id, [FromForm] IFormFile file)
+    public async Task<ActionResult<Result<CourseDto>>> UploadThumbnail(Guid id, [FromForm] UploadCourseThumbnailDto dto)
     {
-        var result = await courseService.UploadThumbnailAsync(id, UserId, IsAdmin, file);
+        var result = await courseService.UploadThumbnailAsync(id, UserId, IsAdmin, dto.File);
         return Ok(result);
     }
 }

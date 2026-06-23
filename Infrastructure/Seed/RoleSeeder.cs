@@ -7,27 +7,16 @@ using Microsoft.Extensions.Configuration;
 
 namespace Infrastructure.Seed;
 
-public class RoleSeeder
+public class RoleSeeder(
+    RoleManager<IdentityRole> roleManager,
+    UserManager<ApplicationUser> userManager,
+    AppDbContext context,
+    IConfiguration configuration)
 {
-    private readonly RoleManager<IdentityRole> _roleManager;
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly AppDbContext _db;
-    private readonly IConfiguration _configuration;
-
-    public RoleSeeder(
-        RoleManager<IdentityRole> roleManager,
-        UserManager<ApplicationUser> userManager,
-        AppDbContext db,
-        IConfiguration configuration)
-    {
-        _roleManager = roleManager;
-        _userManager = userManager;
-        _db = db;
-        _configuration = configuration;
-    }
-
     public async Task SeedAsync()
     {
+        await context.Database.EnsureCreatedAsync();
+
         var roles = new[]
         {
             UserRoles.Admin,
@@ -37,26 +26,26 @@ public class RoleSeeder
 
         foreach (var role in roles)
         {
-            if (!await _roleManager.RoleExistsAsync(role))
+            if (!await roleManager.RoleExistsAsync(role))
             {
-                await _roleManager.CreateAsync(new IdentityRole(role));
+                await roleManager.CreateAsync(new IdentityRole(role));
             }
         }
 
-        if (!await _db.Set<Category>().AnyAsync())
+        if (!await context.Set<Category>().AnyAsync())
         {
-            _db.Set<Category>().AddRange(
+            context.Set<Category>().AddRange(
                 new Category { Name = "Programming", Description = "Software development courses" },
                 new Category { Name = "Design", Description = "Design and product courses" },
                 new Category { Name = "Business", Description = "Business and management courses" });
 
-            await _db.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
 
-        var adminEmail = _configuration["DefaultAdmin:Email"] ?? "admin@example.com";
-        var adminPassword = _configuration["DefaultAdmin:Password"] ?? "Admin123!";
+        var adminEmail = configuration["DefaultAdmin:Email"] ?? "admin@example.com";
+        var adminPassword = configuration["DefaultAdmin:Password"] ?? "Admin123!";
 
-        var admin = await _userManager.FindByEmailAsync(adminEmail);
+        var admin = await userManager.FindByEmailAsync(adminEmail);
         if (admin is null)
         {
             admin = new ApplicationUser
@@ -67,12 +56,12 @@ public class RoleSeeder
                 EmailConfirmed = true
             };
 
-            await _userManager.CreateAsync(admin, adminPassword);
+            await userManager.CreateAsync(admin, adminPassword);
         }
 
-        if (!await _userManager.IsInRoleAsync(admin, UserRoles.Admin))
+        if (!await userManager.IsInRoleAsync(admin, UserRoles.Admin))
         {
-            await _userManager.AddToRoleAsync(admin, UserRoles.Admin);
+            await userManager.AddToRoleAsync(admin, UserRoles.Admin);
         }
     }
 }

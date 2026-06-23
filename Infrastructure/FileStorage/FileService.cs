@@ -12,11 +12,14 @@ public class FileService(IConfiguration configuration) : IFileService
         var publicBase = configuration["FileStorage:PublicBasePath"] ?? "/uploads/thumbnails";
         Directory.CreateDirectory(root);
 
-        var extension = file.ContentType == "image/png" ? ".png" : ".jpg";
+        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (extension is not (".jpg" or ".jpeg" or ".png"))
+            throw new InvalidOperationException("Only jpeg and png files are allowed.");
+
         var fileName = $"{courseId}_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}{extension}";
         var path = Path.Combine(root, fileName);
 
-        await using var stream = File.Create(path);
+        await using var stream = File.Create(paath);
         await file.CopyToAsync(stream);
         return $"{publicBase.TrimEnd('/')}/{fileName}";
     }

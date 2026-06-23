@@ -28,17 +28,17 @@ public class ReviewsController(IReviewService reviewService) : BaseController
 
     [Authorize(Roles = UserRoles.Student)]
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<Result<ReviewDto>>> Update(Guid id, UpdateReviewDto dto)
+    public async Task<ActionResult<Result<ReviewDto>>> Update(Guid courseId, Guid id, UpdateReviewDto dto)
     {
-        var result = await reviewService.UpdateAsync(id, UserId, dto);
+        var result = await reviewService.UpdateAsync(courseId, id, UserId, dto);
         return Ok(result);
     }
 
     [Authorize]
     [HttpDelete("{id:guid}")]
-    public async Task<ActionResult<Result>> Delete(Guid id)
+    public async Task<ActionResult<Result>> Delete(Guid courseId, Guid id)
     {
-        var result = await reviewService.DeleteAsync(id, UserId, IsAdmin);
+        var result = await reviewService.DeleteAsync(courseId, id, UserId, IsAdmin);
         return Ok(result);
     }
 }

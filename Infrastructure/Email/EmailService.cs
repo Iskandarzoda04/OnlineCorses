@@ -12,21 +12,17 @@ public class EmailService(IOptions<SmtpSettings> options, ILogger<EmailService> 
     public async Task SendAsync(EmailMessageDto message)
     {
         var settings = options.Value;
-        var host = string.IsNullOrWhiteSpace(settings.Host) ? settings.SmtpServer : settings.Host;
-        var username = string.IsNullOrWhiteSpace(settings.Username) ? settings.Email : settings.Username;
-        var from = string.IsNullOrWhiteSpace(settings.From) ? settings.Email : settings.From;
-
-        using var client = new SmtpClient(host, settings.Port)
+        using var client = new SmtpClient(settings.Host, settings.Port)
         {
             EnableSsl = settings.EnableSsl
         };
 
-        if (!string.IsNullOrWhiteSpace(username))
-            client.Credentials = new NetworkCredential(username, settings.Password);
+        if (!string.IsNullOrWhiteSpace(settings.Username))
+            client.Credentials = new NetworkCredential(settings.Username, settings.Password);
 
         using var mail = new MailMessage
         {
-            From = new MailAddress(from, settings.DisplayName),
+            From = new MailAddress(settings.From, settings.DisplayName),
             Subject = message.Subject,
             Body = message.Body,
             IsBodyHtml = message.IsHtml

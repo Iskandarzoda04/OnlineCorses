@@ -1,0 +1,17 @@
+bin/
+obj/
+
+**/bin/
+**/obj/
+
+.vs/
+.vscode/
+
+WebApi/Logs/
+WebApi/DataProtectionKeys/
+WebApi/wwwroot/uploads/
+
+*.user
+*.suo
+*.cache
+*.log
