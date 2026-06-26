@@ -28,7 +28,7 @@ public class CoursesController(ICourseService courseService) : BaseController
     [HttpPost]
     public async Task<ActionResult<Result<CourseDto>>> Create(CreateCourseDto dto)
     {
-        var result = await courseService.CreateAsync(UserId, dto);
+        var result = await courseService.CreateAsync(  dto);
         return Ok(result);
     }
 
@@ -36,7 +36,7 @@ public class CoursesController(ICourseService courseService) : BaseController
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<Result<CourseDto>>> Update(Guid id, UpdateCourseDto dto)
     {
-        var result = await courseService.UpdateAsync(id, UserId, IsAdmin, dto);
+        var result = await courseService.UpdateAsync(id,  dto);
         return Ok(result);
     }
 

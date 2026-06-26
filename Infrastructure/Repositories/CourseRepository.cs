@@ -13,6 +13,7 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
         var courses = context.Courses
             .Include(c => c.Instructor)
             .Include(c => c.Category)
+            .Include(c => c.Lessons)
             .Include(c => c.Enrollments)
             .Include(c => c.Reviews)
             .AsQueryable();
@@ -36,8 +37,6 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
         if (query.IsPublished.HasValue)
             courses = courses.Where(c => c.IsPublished == query.IsPublished);
 
-       
-
         return await courses
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
@@ -49,6 +48,7 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
         return await context.Courses
             .Include(c => c.Instructor)
             .Include(c => c.Category)
+            .Include(c => c.Lessons)
             .Include(c => c.Enrollments)
             .Include(c => c.Reviews)
             .FirstOrDefaultAsync(c => c.Id == id);
@@ -59,6 +59,7 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
         return await context.Courses
             .Include(c => c.Instructor)
             .Include(c => c.Category)
+            .Include(c => c.Lessons)
             .Include(c => c.Enrollments)
             .Include(c => c.Reviews)
             .FirstOrDefaultAsync(c => c.Id == id);
@@ -87,4 +88,17 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
         context.Courses.Remove(course);
         await context.SaveChangesAsync();
     }
+
+    public async Task<List<Course>> GetAllAsync()
+    {
+        return await context.Courses
+            .Include(c => c.Instructor)
+            .Include(c => c.Category)
+            .Include(c => c.Lessons)
+            .Include(c => c.Enrollments)
+            .Include(c => c.Reviews)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+    }
+
 }

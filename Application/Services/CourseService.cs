@@ -51,11 +51,14 @@ public class CourseService : ICourseService
         return Result<CourseDto>.Success(MapToDto(course));
     }
 
-    public async Task<Result<CourseDto>> CreateAsync(string instructorId, CreateCourseDto dto)
+    public async Task<Result<CourseDto>> CreateAsync( CreateCourseDto dto)
     {
-        if (string.IsNullOrWhiteSpace(instructorId))
-            return Result<CourseDto>.Failure("User is not authorized.", ErrorType.Unauthorized);
+        return await CreateAsync(string.Empty, dto);
+    }
 
+    public async Task<Result<CourseDto>> CreateAsync(string userId, CreateCourseDto dto)
+    {
+        
         if (string.IsNullOrWhiteSpace(dto.Title))
             return Result<CourseDto>.Failure("Course title is required.", ErrorType.Validation);
 
@@ -76,29 +79,29 @@ public class CourseService : ICourseService
             Price = dto.Price,
             Level = dto.Level,
             CategoryId = dto.CategoryId,
-            InstructorId = instructorId
+            InstructorId = userId,
+        
         };
 
         await _courseRepository.CreateAsync(course);
         await _cache.RemoveAsync("dashboard:summary");
         await _cache.RemoveAsync("dashboard:top-courses");
 
-        _logger.LogInformation("Course {CourseId} created by {InstructorId}", course.Id, instructorId);
+        _logger.LogInformation("Course {CourseId} created", course.Id);
 
         var createdCourse = await _courseRepository.GetByIdAsync(course.Id);
 
         return Result<CourseDto>.Success(MapToDto(createdCourse ?? course));
     }
 
-    public async Task<Result<CourseDto>> UpdateAsync(Guid Id, string userId, bool isAdmin, UpdateCourseDto dto)
+    public async Task<Result<CourseDto>> UpdateAsync(Guid Id,UpdateCourseDto dto)
     {
         var course = await _courseRepository.GetByIdForUpdateAsync(Id);
 
         if (course is null)
             return Result<CourseDto>.Failure("Course not found.", ErrorType.NotFound);
 
-        if (!isAdmin && course.InstructorId != userId)
-            return Result<CourseDto>.Failure("You can update only your own courses.", ErrorType.Forbidden);
+      
 
         if (string.IsNullOrWhiteSpace(dto.Title))
             return Result<CourseDto>.Failure("Course title is required.", ErrorType.Validation);
@@ -211,7 +214,23 @@ public class CourseService : ICourseService
             CategoryId = course.CategoryId,
             CategoryName = course.Category?.Name ?? "",
             AverageRating = course.Reviews.Count == 0 ? 0 : course.Reviews.Average(r => r.Rating),
-            EnrollmentsCount = course.Enrollments.Count
+            StudentsCount = course.Enrollments.Count,
+            LessonsCount = course.Lessons.Count,
+            ReviewsCount = course.Reviews.Count,
+            EnrollmentsCount = course.Enrollments.Count,
+            CreatedAt = course.CreatedAt
         };
     }
+
+    public async Task<Result<List<CourseDto>>> GetAllCourseAsync()
+    {
+        var courses = await _courseRepository.GetAllAsync();
+        return Result<List<CourseDto>>.Success(courses.Select(MapToDto).ToList());
+    }
+
+    public Task<Result<GetAllCourseDto>> GetAll(Guid Id)
+    {
+        throw new NotImplementedException();
+    }
+
 }

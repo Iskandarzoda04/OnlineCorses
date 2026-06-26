@@ -8,6 +8,7 @@ public class CourseDto
     public string Title { get; set; } = "";
     public string? Description { get; set; }
     public decimal Price { get; set; }
+    
     public CourseLevel Level { get; set; }
     public bool IsPublished { get; set; }
     public string? ThumbnailUrl { get; set; }
@@ -16,5 +17,11 @@ public class CourseDto
     public Guid CategoryId { get; set; }
     public string CategoryName { get; set; } = "";
     public double AverageRating { get; set; }
+
+    public int StudentsCount { get; set; }
+    public int LessonsCount { get; set; }
+    public int ReviewsCount { get; set; }
+
     public int EnrollmentsCount { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

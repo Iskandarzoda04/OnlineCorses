@@ -19,7 +19,7 @@ public class FileService(IConfiguration configuration) : IFileService
         var fileName = $"{courseId}_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}{extension}";
         var path = Path.Combine(root, fileName);
 
-        await using var stream = File.Create(paath);
+        await using var stream = File.Create(path);
         await file.CopyToAsync(stream);
         return $"{publicBase.TrimEnd('/')}/{fileName}";
     }
