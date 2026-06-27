@@ -11,6 +11,8 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
     public async Task<List<Course>> GetAsync(CourseQueryDto query)
     {
         var courses = context.Courses
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(c => c.Instructor)
             .Include(c => c.Category)
             .Include(c => c.Lessons)
@@ -46,6 +48,8 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
     public async Task<Course?> GetByIdAsync(Guid id)
     {
         return await context.Courses
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(c => c.Instructor)
             .Include(c => c.Category)
             .Include(c => c.Lessons)
@@ -57,6 +61,7 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
     public async Task<Course?> GetByIdForUpdateAsync(Guid id)
     {
         return await context.Courses
+            .AsSplitQuery()
             .Include(c => c.Instructor)
             .Include(c => c.Category)
             .Include(c => c.Lessons)
@@ -92,6 +97,8 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
     public async Task<List<Course>> GetAllAsync()
     {
         return await context.Courses
+            .AsNoTracking()
+            .AsSplitQuery()
             .Include(c => c.Instructor)
             .Include(c => c.Category)
             .Include(c => c.Lessons)

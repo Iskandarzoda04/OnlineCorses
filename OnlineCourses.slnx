@@ -2,6 +2,7 @@
   <Project Path="Application/Application.csproj" />
   <Project Path="Domain/Domain.csproj" />
   <Project Path="Infrastructure/Infrastructure.csproj" />
+  <Project Path="MvcAAp/MvcAAp.csproj" />
   <Project Path="MyRazor/MyRazor.csproj" />
   <Project Path="WebApi/WebApi.csproj" />
 </Solution>
